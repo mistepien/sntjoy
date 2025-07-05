@@ -106,12 +106,12 @@ word SNESClass::shiftInSNES() {
                                     last cycle is about CTL_ON
                                     */
     PIN_REG = _clockPin_bit;      //hardware XOR
-    //_delay_us(SNES_DELAYSTD_US - 2 );   //6us //but instructions below are a kind of _delay_us :D
+#if (F_CPU > 1000000L)
+    _delay_us(SNES_DELAYSTD_US);
+#endif
     value |= (PIN_REG & _dataPin_bit) ? 0 : btr_snes_output_bits[i];
-    PIN_REG = _clockPin_bit;        //hardware XOR
-    if (i < 16) {                   //thus when i=16 (ctl-on cycle) there is no _delay_us)
-      _delay_us(SNES_DELAYSTD_US);  //6us
-    }
+    PIN_REG = _clockPin_bit;  //hardware XOR
+    _delay_us(SNES_DELAYSTD_US);
   }
 
   /**************************************************/

@@ -70,6 +70,16 @@
 #define bitToggle(value, bit) ((value) ^= (1UL << (bit)))
 #endif
 
+#define BOOL_DETAIL_AND_HELPER(x) static_cast<bool>(x) : false
+#define BOOL_DETAIL_XOR_HELPER(x) !static_cast<bool>(x) : static_cast<bool>(x)
+
+#define BOOL_DETAIL_OPEN (
+#define BOOL_DETAIL_CLOSE )
+
+#define bool_and BOOL_DETAIL_CLOSE ? BOOL_DETAIL_AND_HELPER BOOL_DETAIL_OPEN
+#define bool_or BOOL_DETAIL_CLOSE ? true : static_cast<bool> BOOL_DETAIL_OPEN
+#define bool_xor BOOL_DETAIL_CLOSE ? BOOL_DETAIL_XOR_HELPER BOOL_DETAIL_OPEN
+
 
 //OUTPUT PINS FOR JOYSTICK
 enum joystick_pinout {
@@ -867,6 +877,8 @@ void process_state(word current_gamepad_state) {
     for (byte index = 0; index < 13; index++) {
       if (changed_gamepad_state & 1) {
         button(index, current_gamepad_state & 1);
+      } else if (!changed_gamepad_state) {
+        break;
       }
       changed_gamepad_state >>= 1;
       current_gamepad_state >>= 1;
