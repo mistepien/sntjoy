@@ -70,17 +70,6 @@
 #define bitToggle(value, bit) ((value) ^= (1UL << (bit)))
 #endif
 
-#define BOOL_DETAIL_AND_HELPER(x) static_cast<bool>(x) : false
-#define BOOL_DETAIL_XOR_HELPER(x) !static_cast<bool>(x) : static_cast<bool>(x)
-
-#define BOOL_DETAIL_OPEN (
-#define BOOL_DETAIL_CLOSE )
-
-#define bool_and BOOL_DETAIL_CLOSE ? BOOL_DETAIL_AND_HELPER BOOL_DETAIL_OPEN
-#define bool_or BOOL_DETAIL_CLOSE ? true : static_cast<bool> BOOL_DETAIL_OPEN
-#define bool_xor BOOL_DETAIL_CLOSE ? BOOL_DETAIL_XOR_HELPER BOOL_DETAIL_OPEN
-
-
 //OUTPUT PINS FOR JOYSTICK
 enum joystick_pinout {
   LBTN = 0,     //PB0
@@ -316,7 +305,7 @@ void setup() {
 
   timer_stop();
 
-  //wdt_enable(WDTO_15MS);
+  wdt_enable(WDTO_15MS);
 }
 
 void set_C64_AMIGA_MODE_in_setup(bool ___AMIGAmode___) {
@@ -1032,7 +1021,7 @@ void loop() {
     reading_controller_flag = 0;
   }
   push_stuff();
-  //wdt_reset();
+  wdt_reset();
 }
 
 int main(void) {

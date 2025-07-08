@@ -1,7 +1,7 @@
 // FREQ0 = 14  //7 CPS  (Quickgun Turbo Pro)
 // FREQ1 = 26  //13 CPS (Zipstick)
 // FREQ2 = 58  //29 CPS (Quickshot 128F)
-// FREQ3 = 124 //62 CPS (Competition Pro - Transparent model)
+// FREQ3 = 62 CPS (Competition Pro - Transparent model / Quickshot TopStar SV 127)
 
 typedef struct {
   word ocr1a;

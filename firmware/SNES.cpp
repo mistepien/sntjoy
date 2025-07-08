@@ -86,7 +86,8 @@ word SNESClass::update() {
   --moving out MSBFIRST,
   --switch from logic {LOW=pressed, HIGH=released} to logic {HIGH=pressed, LOW=released},
   --function output is "word" (not "byte") and function reads all 16 bits at once
-  --reorder output using table btr_snes_output_bits[16] */
+  --functions returns is gamepad connected or not,
+  --reorder output using table btr_snes_output_bits[17] */
 word SNESClass::shiftInSNES() {
   word value = 0;
 
