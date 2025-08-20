@@ -60,7 +60,7 @@
   https://eab.abime.net/showpost.php?p=1364366&postcount=3
 */
 
-#define __2X_VER__
+//#define __2X_VER__
 
 #if !((F_CPU == 500000L) || (F_CPU == 1000000L))
 #error This is designed only for 0.5MHz clock or for 1MHz!!!
@@ -81,6 +81,7 @@ enum joystick_pinout {
   C64MODE = 6,  //PB6
   RBTN = 7      //PB7
 };
+
 
 //UBTN/DBTN/LBTN/RBTN/F1BTN are in reversed logic (diodes between MCU and DB9)
 //they are "NOT PRESSED" when they are HIGH
@@ -199,9 +200,13 @@ void setup() {
 
   wdt_disable();
 
-  //INITIALIZE SNES & SET UP REST OF PORTC
-  snes.begin(2, 1, 0);
-  PORTD |= bit(PD3) | bit(PD4) | bit(PD5) | bit(PD6) | bit(PD7);  //input_pullup
+  //INITIALIZE SNES & SET UP REST OF PORTD
+  snes.begin(2, 1, 0);                                           //snes.begin is using PORTD
+  PIND = bit(PD3) | bit(PD4) | bit(PD5) | bit(PD6) | bit(PD7); /*input_pullup
+                                                                  in ver3.x of PCB PD6 and PD7 are
+                                                                  used to set VCC/GND for Fire2 and Fire3
+                                                                  but they cannot float. 
+                                                                  */
 
 #if defined(__AVR_ATmega48PB__) || defined(__AVR_ATmega88PB__) || (__AVR_ATmega168PB__) || defined(__AVR_ATmega328PB__)
   byte _PE_Pins = bit(PE0) | bit(PE1) | bit(PE2) | bit(PE3);
@@ -314,7 +319,49 @@ void set_C64_AMIGA_MODE_in_setup(bool ___AMIGAmode___) {
   } else {
     bitSet(PORTB, C64MODE);  //C64MODE pin is set to HIGH, AMIGAmode flag is 0 -- that is C64 mode
   }*/
+
+#if defined(__2X_VER__)
+
   bitWrite(PORTB, C64MODE, 1 ^ ___AMIGAmode___);
+
+#else
+  /*
+  PD6 -- with resitor
+  PD7 -- without resitor -- for GN
+  starting point about PD6 and PD7
+        | PD6 | PD7 |   ---> PD6 and PD7 are INPUT_PULLUP
+  PORTD |  1  |  1  |
+  DDRD  |  0  |  0  |
+  */
+
+  if (___AMIGAmode___) {
+    bitClear(PORTB, C64MODE);
+
+    PIND = bit(PD6) | bit(PD7);  //        | PD6 | PD7 |   ---> PD6 is INPUT, PD7 is LOW
+    DDRD |= bit(PD7);            //  PORTD |  0  |  0  |
+  } else {                       //  DDRD  |  0  |  1  |
+
+    bitSet(PORTB, C64MODE);
+
+    PIND = bit(PD7);  //        | PD6 | PD7 |   ---> PD6 is HIGH, PD7 is INPUT
+    DDRD |= bit(PD6);  //  PORTD |  1  |  0  |
+  }                    //  DDRD  |  1  |  0  |
+
+
+  /* if (___AMIGAmode___) {
+    bitClear(PORTB, C64MODE);
+
+    PORTD &= ~(bit(PD6) | bit(PD7));           //          PD6 | PD7 |   ---> PD6 is INPUT, PD7 is LOW
+    DDRD = (DDRD & (~(bit(PD6)))) | bit(PD7);  //  PORTD |  0  |  0  |
+  } else {                                     //  DDRD  |  0  |  1  |
+
+    bitSet(PORTB, C64MODE);
+
+    PORTD = (PORTD & (~(bit(PD7)))) | bit(PD6);  //          PD6 | PD7 |   ---> PD6 is HIGH, PD7 is INPUT
+    DDRD = (DDRD & (~(bit(PD7)))) | bit(PD6);    //  PORTD |  1  |  0  |
+  }                                              //  DDRD  |  1  |  0  |
+  */
+#endif
 }
 
 bool complex_bool_value(byte big_byte, byte tested_byte) {
@@ -333,18 +380,12 @@ void set_pullup_mode_in_setup(byte ___AMIGAmode___pullup_mode___) {
 }
 
 bool is_C64_AMIGA_mode_combination_pressed_in_setup(word _snes_state_) {
-  bool _comb_pressed = 0;
-  _comb_pressed = _snes_state_ ^ (_c64_amiga_combination | bit(SNES_CTL_ON));  //xor = 1 -- combination is NOT PRESSED
-  _comb_pressed ^= 1;
-
+  bool _comb_pressed = _snes_state_ ^ (_c64_amiga_combination | bit(SNES_CTL_ON)) ? 0 : 1;  //xor = 1 -- combination is NOT PRESSED
   return _comb_pressed;
 }
 
 bool is_pullup_mode_combination_pressed_in_setup(word _snes_state_) {
-  bool _comb_pressed = 0;
-  _comb_pressed = _snes_state_ ^ (_pullup_combination | bit(SNES_CTL_ON));  //xor = 1 -- combination is NOT PRESSED
-  _comb_pressed ^= 1;
-
+  bool _comb_pressed = _snes_state_ ^ (_pullup_combination | bit(SNES_CTL_ON)) ? 0 : 1;  //xor = 1 -- combination is NOT PRESSED
   return _comb_pressed;
 }
 
@@ -801,8 +842,7 @@ void push_joystate_and_pullstate_to_register(byte _joystate) {
     PINB = changed_joystate;  //hardware XOR
 
     if (complex_bool_value(eeprom_stuff._packed_data, bit(AMIGAmode_bit) | bit(pullup_mode_bit))) {
-      byte changed_F2F3 = changed_joystate & (bit(F2BTN) | bit(F3BTN));
-      update_pull_up_register_in_AMIGA_mode(changed_F2F3);
+      update_pull_up_register_in_AMIGA_mode(changed_joystate & (bit(F2BTN) | bit(F3BTN)));
     }
 
     prev_joystate = _joystate;
