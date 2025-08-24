@@ -60,7 +60,7 @@
   https://eab.abime.net/showpost.php?p=1364366&postcount=3
 */
 
-#define __2X_VER__
+//#define __2X_VER__
 
 #if !((F_CPU == 500000L) || (F_CPU == 1000000L))
 #error This is designed only for 0.5MHz clock or for 1MHz!!!
@@ -307,7 +307,7 @@ void setup() {
   word _snes_state_in_setup = 0;
   byte __mode_combination_pressed__ = 0;
 
-  _delay_us(200);
+  _delay_ms(200);
   ///LOOP FOR C64-AMIGA/PULLUP combination
   while (reads_num < max_blinks) {
 
