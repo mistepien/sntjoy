@@ -60,7 +60,7 @@
   https://eab.abime.net/showpost.php?p=1364366&postcount=3
 */
 
-//#define __2X_VER__
+#define __2X_VER__
 
 #if !((F_CPU == 500000L) || (F_CPU == 1000000L))
 #error This is designed only for 0.5MHz clock or for 1MHz!!!
@@ -180,6 +180,72 @@ byte eeprom_stuff_index;
 constexpr byte sizeof_eeprom_stuff = sizeof(eeprom_stuff);
 constexpr byte eeprom_stuff_last_before_max_index = ((255 / sizeof_eeprom_stuff) * sizeof_eeprom_stuff) - sizeof_eeprom_stuff;
 
+/*
+###################################################################
+########################### EEPROM STUFF
+###################################################################
+*/
+
+byte read_eeprom_stuff_index() {
+  byte _tmp_eeprom_stuff_index = EEPROM.read(0);
+
+  switch (_tmp_eeprom_stuff_index) {
+    case 0:
+      _tmp_eeprom_stuff_index = 1;
+      break;
+    default:
+      if ((_tmp_eeprom_stuff_index - 1) % sizeof_eeprom_stuff) {  //there is remainder -- thus _tmp_eeprom_stuff_index IS NOT dividible by sizeof_eeprom_stuff
+        _tmp_eeprom_stuff_index = 1;
+      }
+  }
+
+  return _tmp_eeprom_stuff_index;
+}
+
+eeprom_buffer_struct read_eeprom_stuff_packed_data() {
+  //read values from EEPROM
+  eeprom_buffer_struct _tmp_eeprom_stuff;
+  eeprom_stuff_index = read_eeprom_stuff_index();
+  EEPROM.get(eeprom_stuff_index, _tmp_eeprom_stuff);
+  return _tmp_eeprom_stuff;
+}
+
+void smart_eeprom_stuff_put() {
+  if (eeprom_stuff._counter == 255) {
+    switch (eeprom_stuff_index) {
+      case 1 ... eeprom_stuff_last_before_max_index:
+        eeprom_stuff_index += sizeof_eeprom_stuff;
+        break;
+      default:
+        eeprom_stuff_index = 1;
+    }
+  }
+  eeprom_stuff._counter++;  //if 255 (byte) after ++ that makes 0
+  noInterrupts();
+  EEPROM.update(0, eeprom_stuff_index);
+  EEPROM.put(eeprom_stuff_index, eeprom_stuff);
+  interrupts();
+}
+
+byte pack_stuff_data(byte __packed_data__, byte _ledstate, byte in_rapidfire_freq) {
+  in_rapidfire_freq |= (_ledstate & (bit(CONF0LED) | bit(CONF1LED)));
+  in_rapidfire_freq |= (__packed_data__ & (bit(AMIGAmode_bit) | bit(pullup_mode_bit)));
+  return in_rapidfire_freq;
+}
+
+void try_push_stuff_to_EEPROM(bool force = 0) {
+  if (save_eeprom_flag || force) {
+    save_eeprom_flag = 0;
+    byte _new_eeprom_stuff___packed_data = pack_stuff_data(eeprom_stuff._packed_data, ledstate, rapidfire_freq);
+    if ((eeprom_stuff._packed_data ^ _new_eeprom_stuff___packed_data) || force) {
+      eeprom_stuff._packed_data = _new_eeprom_stuff___packed_data;
+      smart_eeprom_stuff_put();  //that takes time so before that eeprom_stuff's changes are checked earlier
+    }
+  }
+}
+
+//#########################################################################
+
 void setup() {
   DDRB = 0xFF;  //OUTPUT LOW: PB0-7:
   //DDRB |= ATARI_JOY | bit(F2BTN) | bit(F3BTN) | bit(C64MODE);
@@ -201,7 +267,7 @@ void setup() {
   wdt_disable();
 
   //INITIALIZE SNES & SET UP REST OF PORTD
-  snes.begin(2, 1, 0);                                           //snes.begin is using PORTD
+  snes.begin(2, 1, 0);                                         //snes.begin is using PORTD
   PIND = bit(PD3) | bit(PD4) | bit(PD5) | bit(PD6) | bit(PD7); /*input_pullup
                                                                   in ver3.x of PCB PD6 and PD7 are
                                                                   used to set VCC/GND for Fire2 and Fire3
@@ -241,7 +307,7 @@ void setup() {
   word _snes_state_in_setup = 0;
   byte __mode_combination_pressed__ = 0;
 
-
+  _delay_us(200);
   ///LOOP FOR C64-AMIGA/PULLUP combination
   while (reads_num < max_blinks) {
 
@@ -255,12 +321,12 @@ void setup() {
 
     if (reading_controller_flag) {
       _snes_state_in_setup = snes.getState();
+      reading_controller_flag = 0;
       if (is_C64_AMIGA_mode_combination_pressed_in_setup(_snes_state_in_setup)) {
         bitSet(__mode_combination_pressed__, AMIGAmode_bit);
       } else if (is_pullup_mode_combination_pressed_in_setup(_snes_state_in_setup)) {
         bitSet(__mode_combination_pressed__, pullup_mode_bit);
       }
-      reading_controller_flag = 0;
     }
 
     if (__mode_combination_pressed__) {
@@ -272,24 +338,16 @@ void setup() {
   }
   ////end of LOOP for combination
 
-  tmp_eeprom_stuff._packed_data ^= __mode_combination_pressed__;
 
-  if (__mode_combination_pressed__ & bit(AMIGAmode_bit)) {
+  //set up pullup_mode and C64_AMIGA_MODE
+  tmp_eeprom_stuff._packed_data ^= __mode_combination_pressed__;
+  if (__mode_combination_pressed__ & bit(AMIGAmode_bit)) {  //AMIGAmode was already setup, that is update
     set_C64_AMIGA_MODE_in_setup(bitRead(tmp_eeprom_stuff._packed_data, AMIGAmode_bit));
   }
-
-  set_pullup_mode_in_setup(tmp_eeprom_stuff._packed_data);
+  set_pullup_mode_in_setup(tmp_eeprom_stuff._packed_data);  //by default pull-up is disabled
+  //////////////////////////////////////////
 
   eeprom_stuff = tmp_eeprom_stuff;
-
-  if (__mode_combination_pressed__) {
-    smart_eeprom_stuff_put();
-    if (__mode_combination_pressed__ & bit(AMIGAmode_bit)) {
-      blinking_leds_after_combination(ALL_LEDS);
-    } else if (__mode_combination_pressed__ & bit(pullup_mode_bit)) {
-      blinking_leds_after_combination(tmp_eeprom_stuff._packed_data & bit(pullup_mode_bit) ? bit(CONF0LED) | bit(CONF1LED) : bit(CONF1LED) | bit(AUTOFIRELED));
-    }
-  }
 
   //set joyconf
   byte tmp_joyconf = (tmp_eeprom_stuff._packed_data & (bit(CONF0LED) | bit(CONF1LED))) >> CONF0LED;
@@ -297,6 +355,15 @@ void setup() {
 
   //set rapidfire frequency
   rapidfire_freq = tmp_eeprom_stuff._packed_data & 3;
+
+  if (__mode_combination_pressed__) {
+    try_push_stuff_to_EEPROM(1);
+    if (__mode_combination_pressed__ & bit(AMIGAmode_bit)) {
+      blinking_leds_after_combination(ALL_LEDS);
+    } else if (__mode_combination_pressed__ & bit(pullup_mode_bit)) {
+      blinking_leds_after_combination(tmp_eeprom_stuff._packed_data & bit(pullup_mode_bit) ? bit(CONF0LED) | bit(CONF1LED) : bit(CONF1LED) | bit(AUTOFIRELED));
+    }
+  }
 
   //power stuff -- power only necessary things
   power_all_disable();
@@ -343,7 +410,7 @@ void set_C64_AMIGA_MODE_in_setup(bool ___AMIGAmode___) {
 
     bitSet(PORTB, C64MODE);
 
-    PIND = bit(PD7);  //        | PD6 | PD7 |   ---> PD6 is HIGH, PD7 is INPUT
+    PIND = bit(PD7);   //        | PD6 | PD7 |   ---> PD6 is HIGH, PD7 is INPUT
     DDRD |= bit(PD6);  //  PORTD |  1  |  0  |
   }                    //  DDRD  |  1  |  0  |
 
@@ -379,13 +446,13 @@ void set_pullup_mode_in_setup(byte ___AMIGAmode___pullup_mode___) {
          other */
 }
 
-bool is_C64_AMIGA_mode_combination_pressed_in_setup(word _snes_state_) {
-  bool _comb_pressed = _snes_state_ ^ (_c64_amiga_combination | bit(SNES_CTL_ON)) ? 0 : 1;  //xor = 1 -- combination is NOT PRESSED
+bool is_pullup_mode_combination_pressed_in_setup(word _snes_state_) {
+  bool _comb_pressed = _snes_state_ ^ (_pullup_combination | bit(SNES_CTL_ON)) ? 0 : 1;  //xor = 1 -- combination is NOT PRESSED
   return _comb_pressed;
 }
 
-bool is_pullup_mode_combination_pressed_in_setup(word _snes_state_) {
-  bool _comb_pressed = _snes_state_ ^ (_pullup_combination | bit(SNES_CTL_ON)) ? 0 : 1;  //xor = 1 -- combination is NOT PRESSED
+bool is_C64_AMIGA_mode_combination_pressed_in_setup(word _snes_state_) {
+  bool _comb_pressed = _snes_state_ ^ (_c64_amiga_combination | bit(SNES_CTL_ON)) ? 0 : 1;  //xor = 1 -- combination is NOT PRESSED
   return _comb_pressed;
 }
 
@@ -446,18 +513,18 @@ ISR(TIMER2_COMPA_vect) {
   reading_controller_flag = 1;
 
   static unsigned int _counter_eeprom;
+
   if (_counter_eeprom == 0) {
     save_eeprom_flag = 1;
   }
 
-  if (_counter_eeprom++ > 1200) {  //1200 * 3,7ms = 4440 ms =4.44s
-    _counter_eeprom = 0;
-  }
+  _counter_eeprom = _counter_eeprom > 511 ? 0 : _counter_eeprom + 1;  //512 * 3,7ms =  1894 ms = 1.9s
 
-  static byte _counter;
+  static byte _counter_blinking;
   if (1 ^ ctl_on) {
-    if (_counter++ > 40) {  //40 * 3,7ms = 148ms
-      _counter = 0;
+    _counter_blinking = _counter_blinking > 40 ? 0 : _counter_blinking + 1;  //40 * 3,7ms = 148ms
+
+    if (_counter_blinking == 0) {
       blinking_led ^= 1;
       if (ctl_off_led_bit_number++ > 2) {
         ctl_off_led_bit_number = 0;
@@ -484,7 +551,7 @@ void timer_start(byte rspeed = 0) {
       break; 
   } */
   TCCR1B |= timer_params[rspeed].prescaler ? bit(CS11) : bit(CS10);
-#elif (F_CPU == 500000L)  //only one prescaler: 1
+#elif ((F_CPU == 500000L) || (F_CPU == 250000L))  //only one prescaler: 1
   TCCR1B |= bit(CS10);  //1
 #endif
 
@@ -988,72 +1055,6 @@ void push_stuff() {
 
   try_push_stuff_to_EEPROM();
 }
-
-/*
-###################################################################
-########################### EEPROM STUFF
-###################################################################
-*/
-
-byte read_eeprom_stuff_index() {
-  byte _tmp_eeprom_stuff_index = EEPROM.read(0);
-
-  switch (_tmp_eeprom_stuff_index) {
-    case 0:
-      _tmp_eeprom_stuff_index = 1;
-      break;
-    default:
-      if ((_tmp_eeprom_stuff_index - 1) % sizeof_eeprom_stuff) {  //there is remainder -- thus _tmp_eeprom_stuff_index IS NOT dividible by sizeof_eeprom_stuff
-        _tmp_eeprom_stuff_index = 1;
-      }
-  }
-
-  return _tmp_eeprom_stuff_index;
-}
-
-eeprom_buffer_struct read_eeprom_stuff_packed_data() {
-  //read values from EEPROM
-  eeprom_buffer_struct _tmp_eeprom_stuff;
-  eeprom_stuff_index = read_eeprom_stuff_index();
-  EEPROM.get(eeprom_stuff_index, _tmp_eeprom_stuff);
-  return _tmp_eeprom_stuff;
-}
-
-void smart_eeprom_stuff_put() {
-  if (eeprom_stuff._counter == 255) {
-    switch (eeprom_stuff_index) {
-      case 1 ... eeprom_stuff_last_before_max_index:
-        eeprom_stuff_index += sizeof_eeprom_stuff;
-        break;
-      default:
-        eeprom_stuff_index = 1;
-    }
-  }
-  eeprom_stuff._counter++;  //if 255 (byte) after ++ that makes 0
-  noInterrupts();
-  EEPROM.update(0, eeprom_stuff_index);
-  EEPROM.put(eeprom_stuff_index, eeprom_stuff);
-  interrupts();
-}
-
-byte pack_stuff_data(byte __packed_data__, byte _ledstate, byte in_rapidfire_freq) {
-  in_rapidfire_freq |= (_ledstate & (bit(CONF0LED) | bit(CONF1LED)));
-  in_rapidfire_freq |= (__packed_data__ & (bit(AMIGAmode_bit) | bit(pullup_mode_bit)));
-  return in_rapidfire_freq;
-}
-
-void try_push_stuff_to_EEPROM() {
-  if (save_eeprom_flag) {
-    save_eeprom_flag = 0;
-    byte _new_eeprom_stuff___packed_data = pack_stuff_data(eeprom_stuff._packed_data, ledstate, rapidfire_freq);
-    if (eeprom_stuff._packed_data ^ _new_eeprom_stuff___packed_data) {
-      eeprom_stuff._packed_data = _new_eeprom_stuff___packed_data;
-      smart_eeprom_stuff_put();  //that takes time so before that eeprom_stuff's changes are checked earlier
-    }
-  }
-}
-
-//#########################################################################
 
 void loop() {
   if (reading_controller_flag) {

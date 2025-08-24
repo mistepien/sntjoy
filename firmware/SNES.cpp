@@ -103,6 +103,7 @@ word SNESClass::shiftInSNES() {
   PIN_REG = _strobePin_bit;  //hardware XOR
   _delay_us(SNES_DELAYSTD_US);
 
+  //#pragma GCC unroll 16
   for (byte i = 0; i < 17; i++) { /* must be 0..16 for having functional CTL_ON read
                                     last cycle is about CTL_ON
                                     */
@@ -110,7 +111,7 @@ word SNESClass::shiftInSNES() {
 #if (F_CPU > 1000000L)
     _delay_us(SNES_DELAYSTD_US);
 #endif
-    value |= (PIN_REG & _dataPin_bit) ? 0 : btr_snes_output_bits[i];
+    value |= PIN_REG & _dataPin_bit ? 0 : btr_snes_output_bits[i];
     PIN_REG = _clockPin_bit;  //hardware XOR
     _delay_us(SNES_DELAYSTD_US);
   }
